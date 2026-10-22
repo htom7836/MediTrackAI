@@ -1,0 +1,10 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {validateMedication,seedState,recordDose,completion,localDate,scheduled,taskSummary,assistantAnswer} from './model';
+test('rejects missing names, doses, invalid times and duplicate schedules',()=>{const m=seedState().medications[0];assert.ok(validateMedication({...m,name:''}));assert.ok(validateMedication({...m,dose:''}));assert.ok(validateMedication({...m,time:'25:00'}));assert.ok(validateMedication(m,[m]));assert.equal(validateMedication(m,[m],m.id),'');});
+test('dose confirmation is idempotent and updates completion',()=>{const s=seedState();const m=s.medications[1];const updated=recordDose(s,m,'taken');assert.equal(completion(updated.medications,updated.records).taken,2);assert.equal(recordDose(updated,m,'taken').records.length,updated.records.length);});
+test('daily confirmations do not carry over to another date',()=>{const s=seedState();const next=new Date();next.setDate(next.getDate()+1);assert.equal(completion(s.medications,s.records,localDate(next)).taken,0);});
+test('medications do not appear before their start date',()=>{const s=seedState();assert.equal(scheduled(s.medications,'2000-01-01').length,0);});
+test('skipped records are not counted as taken',()=>{const s=seedState();const next=recordDose(s,s.medications[1],'skipped');assert.equal(completion(next.medications,next.records).taken,1);});
+test('evaluation uses distinct participants and latest attempt',()=>{const rows=Array.from({length:5},(_,i)=>({id:String(i),tester:'P'+i,task:'Add a medication',outcome:(i===4?'failed':'independent') as 'failed'|'independent',seconds:30,errors:0,feedback:''}));assert.equal(taskSummary(rows,'Add a medication').meetsTarget,true);assert.equal(taskSummary([...rows,{...rows[0],outcome:'failed'}],'Add a medication').meetsTarget,false);assert.equal(taskSummary(rows.slice(0,4),'Add a medication').meetsTarget,false);});
+test('medical treatment requests receive no individualized dose advice',()=>{assert.match(assistantAnswer('Should I double my dose?'),/qualified doctor or pharmacist/);});
